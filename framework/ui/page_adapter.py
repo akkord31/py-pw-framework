@@ -21,7 +21,9 @@ class PageAdapter:
 
     def wait_for_load_state(
         self,
-        state: typing.Literal["domcontentloaded", "load", "networkidle"] = "domcontentloaded",
+        state: typing.Literal[
+            "domcontentloaded", "load", "networkidle"
+        ] = "domcontentloaded",
         *,
         timeout: typing.Optional[float] = None,
     ) -> None:

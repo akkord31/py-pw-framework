@@ -16,6 +16,7 @@ class TokenResponse(BaseModel):
 
 class LoginResponse(BaseModel):
     """Flexible wrapper"""
+
     token: str = Field(alias="access_token")
     token_type: str = "bearer"
 

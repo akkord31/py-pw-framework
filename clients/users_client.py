@@ -25,7 +25,9 @@ class UsersClient(BaseClient):
 
     @allure.step("PATCH /users/{user_id}")
     def update_user(self, user_id: int, payload: UserUpdate) -> UserResponse:
-        response = self.patch(f"/users/{user_id}", json=payload.model_dump(exclude_none=True))
+        response = self.patch(
+            f"/users/{user_id}", json=payload.model_dump(exclude_none=True)
+        )
         return UserResponse.model_validate(response.json())
 
     @allure.step("DELETE /users/{user_id}")

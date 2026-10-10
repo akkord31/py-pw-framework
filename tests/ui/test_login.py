@@ -14,11 +14,13 @@ from pages.login_page import LoginPage
 @allure.story("UI Login")
 @pytest.mark.ui
 class TestLogin:
-
     @allure.title("Successful login redirects to dashboard")
     @pytest.mark.smoke
     def test_login_success(self, page: Page, base_url: str) -> None:
-        login = LoginPage(page, base_url,).open()
+        login = LoginPage(
+            page,
+            base_url,
+        ).open()
         login.login("standard_user", "secret_sauce")
 
         dashboard = DashboardPage(page, base_url)

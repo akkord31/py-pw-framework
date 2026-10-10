@@ -5,8 +5,7 @@ import pytest
 import respx
 
 from clients.users_client import UsersClient
-from framework.api.exceptions import NotFoundError, ForbiddenError
-from models.user import UserCreate, UserUpdate
+from framework.api.exceptions import NotFoundError
 
 BASE_URL = "http://testserver"
 
@@ -21,7 +20,16 @@ def users_client():
 @respx.mock
 def test_get_user(users_client: UsersClient) -> None:
     respx.get(f"{BASE_URL}/users/1").mock(
-        return_value=httpx.Response(200, json={"id": 1, "username": "admin", "email": "admin@test.local", "role": "admin", "is_active": True})
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 1,
+                "username": "admin",
+                "email": "admin@test.local",
+                "role": "admin",
+                "is_active": True,
+            },
+        )
     )
 
     user = users_client.get_user(1)
@@ -41,4 +49,3 @@ def test_get_user_not_found(users_client: UsersClient) -> None:
         users_client.get_user(999)
 
     assert exc_info.value.status_code == 404
-

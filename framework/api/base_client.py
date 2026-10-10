@@ -41,11 +41,19 @@ class BaseClient:
         return self._request("DELETE", path, **kwargs)
 
     def _request(self, method: str, path: str, **kwargs: typing.Any) -> httpx.Response:
-        url = path if path.startswith("http") else f"{self._base_url}/{path.lstrip('/')}"
+        url = (
+            path if path.startswith("http") else f"{self._base_url}/{path.lstrip('/')}"
+        )
         logger.debug("%s %s", method, url)
 
         response = self._client.request(method, url, **kwargs)
-        logger.debug("%s %s -> %d (%.0f ms)", method, url, response.status_code, response.elapsed.total_seconds() * 1000)
+        logger.debug(
+            "%s %s -> %d (%.0f ms)",
+            method,
+            url,
+            response.status_code,
+            response.elapsed.total_seconds() * 1000,
+        )
 
         raise_for_status(response.status_code, response.text, url)
         return response

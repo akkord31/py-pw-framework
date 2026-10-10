@@ -60,7 +60,9 @@ class BrowserFactory:
         self._contexts[name] = ctx
         return ctx
 
-    def get_context(self, name: Literal["primary", "secondary"] = "primary") -> BrowserContext:
+    def get_context(
+        self, name: Literal["primary", "secondary"] = "primary"
+    ) -> BrowserContext:
         if name not in self._contexts:
             raise RuntimeError(f"Context {name!r} not found, call new_context() first")
         return self._contexts[name]
