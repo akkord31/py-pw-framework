@@ -21,7 +21,7 @@ class BasePage:
     def expect(self) -> PageAssertions:
         return self._page.expect
 
-    @allure.step("Navigate to {0.PATH}")
+    @allure.step("Navigate to page")
     def open(self) -> "BasePage":
         url = f"{self._base_url}{self.PATH}"
         logger.info("Navigating to %s", url)
