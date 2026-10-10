@@ -26,7 +26,7 @@ def test_login_returns_token(auth_client: AuthClient) -> None:
         )
     )
 
-    response = auth_client.login(LoginRequest(username="admin", password="admin"))
+    response = auth_client.login(LoginRequest(username="standard_user", password="secret_sauce"))
 
     assert response.token == "abc123"
     assert response.token_type == "bearer"
@@ -39,7 +39,7 @@ def test_login_invalid_password(auth_client: AuthClient) -> None:
     )
 
     with pytest.raises(UnauthorizedError) as exc_info:
-        auth_client.login(LoginRequest(username="admin", password="wrong"))
+        auth_client.login(LoginRequest(username="standard_user", password="wrong"))
 
     assert exc_info.value.status_code == 401
 
@@ -51,6 +51,6 @@ def test_login_forbidden(auth_client: AuthClient) -> None:
     )
 
     with pytest.raises(ForbiddenError) as exc_info:
-        auth_client.login(LoginRequest(username="blocked_user", password="admin"))
+        auth_client.login(LoginRequest(username="blocked_user", password="secret_sauce"))
 
     assert exc_info.value.status_code == 403
