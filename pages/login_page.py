@@ -2,10 +2,9 @@ import allure
 from playwright.sync_api import Page
 
 from framework.ui.base_page import BasePage
+from framework.ui.components.login_form import LoginForm
 from framework.ui.page_adapter import PageAdapter
 from framework.ui.ui_component import UiComponent
-from framework.ui.components.button import Button
-from framework.ui.components.input import Input
 
 
 class LoginPage(BasePage):
@@ -14,9 +13,10 @@ class LoginPage(BasePage):
     def __init__(self, page: Page, base_url: str) -> None:
         super().__init__(PageAdapter(page), base_url)
 
-        self.username_input = Input(page, "[data-test='username']")
-        self.password_input = Input(page, "[data-test='password']")
-        self.login_button = Button(page, "[data-test='login-button']")
+        self.login_form = LoginForm(page)
+        self.username_input = self.login_form.username_input
+        self.password_input = self.login_form.password_input
+        self.login_button = self.login_form.login_button
         self.error_message = UiComponent(
             page,
             page.locator("[data-test='error']"),
@@ -27,9 +27,7 @@ class LoginPage(BasePage):
 
     @allure.step("Login as {username}")
     def login(self, username: str, password: str) -> None:
-        self.username_input.fill(username)
-        self.password_input.fill(password)
-        self.login_button.click()
+        self.login_form.login(username, password)
 
     @allure.step("Verify login error message")
     def expect_error(self, text: str) -> None:

@@ -1,13 +1,20 @@
 from typing import Optional
 
-from playwright.sync_api import Page
+from playwright.sync_api import Locator, Page
 
 from framework.ui.ui_component import UiComponent
 
 
 class Input(UiComponent):
-    def __init__(self, page: Page, selector: str) -> None:
-        super().__init__(page, page.locator(selector))
+    def __init__(
+        self,
+        page: Page,
+        selector: str,
+        *,
+        root: Optional[Locator] = None,
+    ) -> None:
+        locator = page.locator(selector) if root is None else root.locator(selector)
+        super().__init__(page, locator)
 
     def fill(
         self,
