@@ -1,464 +1,149 @@
 ---
 name: page-object-creation
 description: >-
-  Create, extend and refactor Playwright Page Objects and UI components.
-  Use when implementing new pages, locators, reusable UI elements or
-  page-level interactions in the existing Python pytest framework.
+  Create, extend, or refactor Playwright Page Objects in pages/ and reusable UI
+  components in framework/ui/components/. Use when adding page-level actions,
+  verified locators, composite components, root-scoped inputs/buttons, or
+  iframe handling in the existing pytest framework.
 ---
 
 # Page Object Creation
 
-## Purpose
+## When to use
 
-Create maintainable Page Objects and reusable UI components
-using the existing Python, pytest and Playwright sync API architecture.
+Use this Skill when a UI scenario needs a new Page Object, a new reusable UI
+component, or a change to an existing locator/action. For test scenarios and
+assertions, use `writing-ui-tests`. Follow `AGENTS.md` for global rules.
 
-Follow `AGENTS.md` for global project rules.
+Inspect the actual class before using it. Never invent a constructor, method,
+selector, or framework API.
 
-Related skills:
-- `writing-ui-tests` — UI test implementation.
-- `allure-annotations-and-naming` — reporting conventions.
-- `triaging-test-failures` — investigation of UI failures.
+## 1. Existing building blocks
 
-Never invent framework interfaces, component methods or selectors.
-
-## 1. Framework Architecture
-
-The project uses:
-
-| Component | Location | Responsibility |
+| Class | Location | Contract |
 |---|---|---|
-| `BasePage` | `framework/ui/base_page.py` | Base class for Page Objects |
-| `PageAdapter` | `framework/ui/page_adapter.py` | Playwright page abstraction |
-| `UiComponent` | `framework/ui/ui_component.py` | Base UI component wrapper |
-| `Input` | `framework/ui/components/input.py` | Input interactions |
-| `Button` | `framework/ui/components/button.py` | Button interactions |
-| `BrowserFactory` | `framework/ui/browser/browser_factory.py` | Browser and context management |
+| `BasePage` | `framework/ui/base_page.py` | `__init__(page: PageAdapter, base_url: str)`, `PATH`, `open()`, `expect`, `_wait_for_ready()`, `get_iframe_locator()` |
+| `PageAdapter` | `framework/ui/page_adapter.py` | Wraps native `Page`: `locator`, `frame_locator`, `goto`, `wait_for_load_state`, `wait_for_url`, `screenshot`, `expect`, `url`, `raw_page` |
+| `UiComponent` | `framework/ui/ui_component.py` | `__init__(page: Page, locator: Locator)`, `locator`, `expect` |
+| `Input` | `framework/ui/components/input.py` | `Input(page, selector, *, root=None)`, `fill`, `clear`, `input_value` |
+| `Button` | `framework/ui/components/button.py` | `Button(page, selector, *, root=None)`, `click(...)` |
+| `CheckBox` | `framework/ui/components/checkbox.py` | `CheckBox(page, selector)`, `check`, `uncheck`, `is_checked`, `set_value` |
+| `BrowserFactory` | `framework/ui/browser/browser_factory.py` | Session browser and context lifecycle; do not instantiate inside a test |
 
-Before implementation, read the actual definitions.
+`PageAdapter.raw_page` exists, but prefer adapter methods. Native `Page` and
+`PageAdapter` are not interchangeable: components such as `Input` and
+`Button` expect native `Page` and `Locator`.
 
-Do not assume that methods available in native Playwright
-are automatically exposed through `PageAdapter`.
+## 2. Page Objects
 
-### PageAdapter
-
-Use `PageAdapter` for page-level browser operations
-supported by its current interface.
-
-Examples of responsibilities:
-
-- Navigation
-- Page load handling
-- Locator access
-- Frame or iframe interactions
-- Browser page operations
-
-Inspect the adapter before calling a method.
-
-If a native Playwright `Page` or `Locator` is required,
-use the existing access mechanism exposed by the adapter.
-
-Do not assume `raw_page` exists without verifying it.
-
-Do not modify `PageAdapter` merely to support one Page Object
-unless explicitly authorized.
-
-### BasePage
-
-Application Page Objects inherit from `BasePage`.
-
-Follow its actual constructor contract.
-
-The project convention uses `PageAdapter` and `base_url`,
-but inspect `BasePage.__init__` before instantiation.
-
-Reuse inherited methods rather than duplicating navigation,
-waiting or locator functionality.
-
-### UiComponent
-
-Use `UiComponent` and existing specialized components
-to encapsulate element interactions.
-
-Before creating a component, inspect:
-
-- Its constructor arguments.
-- Its expected `Page` or `Locator` type.
-- Its public methods.
-- Its waiting behavior.
-- Its assertion methods.
-
-Do not pass `PageAdapter` to an API expecting native `Page`
-unless the existing framework explicitly supports it.
-
-## 2. File Structure
-
-Application Page Objects belong in:
-
-```text
-pages/
-```
-
-Naming conventions:
-
-```text
-login_page.py
-settings_page.py
-users_page.py
-```
-
-Class names:
+Application Page Objects belong in `pages/` and inherit `BasePage`.
 
 ```python
-LoginPage
-SettingsPage
-UsersPage
+class LoginPage(BasePage):
+    PATH = "/"
+
+    def __init__(self, page: Page, base_url: str) -> None:
+        super().__init__(PageAdapter(page), base_url)
+        self.login_form = LoginForm(page)
+        ...
 ```
-
-Reusable UI components belong in the appropriate existing
-component directory.
-
-Inspect the project structure before choosing the location.
-
-Do not create a new directory or abstraction layer
-when an existing one is suitable.
-
-## 3. Page Objects vs UI Components
-
-### Page Object
-
-Represents a page or meaningful application boundary.
-
-Responsibilities:
-
-- Page-specific locators.
-- Page navigation.
-- User-facing actions.
-- Page-level state checks.
-- Composition of UI components.
-
-### UI Component
-
-Represents a reusable or logically independent part of the UI.
-
-Examples:
-
-- Login form.
-- Navigation menu.
-- Modal dialog.
-- Search panel.
-- Table.
-- Date picker.
-
-Use an existing component when possible.
-
-Create a new component when it meaningfully encapsulates
-related elements or reusable behavior.
-
-Do not extract every button or input into a separate class
-unless the project architecture requires it.
-
-## 4. Locator Rules
-
-**All selectors must come from verified evidence.**
-
-Acceptable sources:
-
-1. Existing Page Objects.
-2. Existing UI components.
-3. Actual application DOM inspected through Playwright MCP.
-4. Application source code.
-5. Verified test documentation.
-
-Never invent selectors.
-
-### Preferred locator strategies
-
-Choose stable selectors appropriate for the application:
-
-1. Test-specific attributes such as `data-testid`.
-2. Accessible roles and names.
-3. Stable IDs and semantic attributes.
-4. CSS selectors.
-5. XPath when necessary.
-
-This is a preference, not a mandatory hierarchy.
-
-Prefer the most reliable selector available.
-
-### Avoid
-
-- Randomly generated classes or IDs.
-- Fragile DOM hierarchies.
-- Unnecessary positional selectors.
-- Arbitrary `nth()` calls.
-- Duplicated locators.
-- CSS/XPath scattered throughout test functions.
-- Hardcoded dynamic values.
-
-When a locator matches multiple elements, scope it
-to a stable parent or container.
-
-Use `.first()` or `.nth()` only when the position
-is meaningful and justified.
-
-### Dynamic locators
-
-Use parameterized Page Object methods.
-
-Example:
-
-```python
-def get_user_row(self, username: str):
-    ...
-```
-
-Build locators from stable identifiers.
-
-Do not duplicate methods for every possible username,
-host, database or table row.
-
-## 5. UI Components
-
-Prefer specialized wrappers:
-
-- `Input` for text fields.
-- `Button` for buttons.
-- `UiComponent` for general elements.
-- Existing specialized components when available.
-
-Do not bypass a component's public API without a reason.
-
-For composite components:
-
-- Keep related locators together.
-- Encapsulate meaningful interactions.
-- Avoid duplicating parent Page Object logic.
-- Use composition rather than unnecessary inheritance.
-
-Example design:
-
-```text
-LoginPage
-    └── LoginForm
-          ├── username: Input
-          ├── password: Input
-          └── submit: Button
-```
-
-This diagram describes responsibilities, not constructor syntax.
-
-Use actual project constructors and verified locators.
-
-## 6. Page Object Methods
-
-Methods should describe application behavior.
-
-Prefer:
-
-```python
-login(username, password)
-open_user_details(username)
-select_role(role_name)
-```
-
-Over low-level methods that require tests to coordinate
-multiple internal components unnecessarily.
 
 Rules:
 
-- Use descriptive `snake_case` names.
-- Apply type annotations.
-- Return meaningful values where appropriate.
-- Keep methods focused on one action or responsibility.
-- Reuse existing component methods.
-- Avoid unnecessary side effects.
-- Do not duplicate inherited functionality.
+- Use `BasePage.open()` and `_wait_for_ready()` rather than duplicating
+  navigation/readiness.
+- Compose components; do not duplicate their locators or actions.
+- Expose meaningful page-level actions and expectation methods.
+- Keep selectors inside the Page Object/component, not in tests.
+- Use `snake_case` methods and type annotations; inspect existing return types.
 
-Separate actions from verification where practical.
+`LoginPage` composes `LoginForm`, exposes field aliases, and wraps the error
+message. `DashboardPage` composes `UiComponent` and `Button` elements. Follow
+these patterns before inventing new ones.
 
-Use Playwright assertions or existing component assertion methods
-for state verification.
+## 3. UI components
 
-Never implement a method using a framework API
-that has not been inspected.
-
-## 7. Synchronization
-
-Playwright provides automatic waiting for many interactions.
-
-Prefer:
-
-- Locator-based interaction.
-- Playwright assertions.
-- Existing framework waiting methods.
-- Explicit condition-based waits when necessary.
-
-Avoid:
+Use `UiComponent` for a general element and `Input`/`Button`/`CheckBox` for
+specialized interactions. A composite component belongs in
+`framework/ui/components/`.
 
 ```python
-time.sleep(5)
+class LoginForm(UiComponent):
+    def __init__(self, page: Page) -> None:
+        super().__init__(page, page.locator("form"))
+        self.username_input = Input(page, "[data-test='username']", root=self.locator)
+        self.password_input = Input(page, "[data-test='password']", root=self.locator)
+        self.login_button = Button(page, "[data-test='login-button']", root=self.locator)
 ```
 
-Do not use arbitrary delays to fix flaky tests.
+Rules:
 
-Do not use `networkidle` as a universal readiness strategy.
+- Pass the native `Page` where the component expects it; scope child locators
+  with `root=self.locator` when the selector is not page-unique.
+- Keep related locators and interactions in the component.
+- Use composition, not unnecessary inheritance.
+- Do not extract every single element into a class.
+- Do not add a new component directory; use `framework/ui/components/`.
 
-### Loading indicators
+## 4. Locators
 
-If the application displays a loading indicator:
+Every selector must come from verified evidence:
 
-1. Confirm its actual selector.
-2. Identify when loading begins and ends.
-3. Wait for the relevant observable state.
-4. Avoid adding redundant waits.
+1. Existing Page Objects/components.
+2. Actual application DOM inspected through an available Playwright MCP tool.
+3. Application source code.
+4. Supplied/verified DOM fragments or test documentation.
 
-### Dynamic content
+Prefer stable `data-test`/`data-testid` attributes, accessible roles/names, or
+stable semantic attributes. Use CSS/XPath only when appropriate. Avoid
+generated classes, fragile absolute XPath, arbitrary `nth()`/`first()`, and
+duplicated selectors.
 
-Use conditions that reflect the application state:
+When a selector matches multiple elements, scope it to a stable parent via
+`root`. Do not guess. If DOM inspection is unavailable, report which selectors
+remain unverified and do not claim inspection occurred.
 
-- Element becomes visible.
-- Element disappears.
-- Attribute changes.
-- Expected text appears.
-- URL changes.
-- Loading completes.
+Dynamic values belong in method parameters or stable locator construction, not
+in duplicated methods for every value.
 
-Respect the project's existing timeout configuration.
+## 5. Synchronization and iframes
 
-Do not increase global timeouts to hide a specific defect.
+Rely on Playwright auto-waiting and retrying assertions. Use observable
+state; do not add `time.sleep()` or global timeout increases to hide races.
+`DashboardPage` uses `networkidle` for its existing readiness check; do not
+copy that as a universal strategy.
 
-## 8. Iframes
+For iframes, use `BasePage.get_iframe_locator()` or
+`PageAdapter.frame_locator()`. Confirm whether subsequent locators operate on
+`Page` or `FrameLocator`; ordinary page locators do not cross iframe
+boundaries.
 
-Use the existing `PageAdapter` iframe mechanism
-when available.
+## 6. Allure
 
-Before implementing iframe interactions:
+Page Object methods use meaningful `@allure.step` decorations where existing
+patterns do (for example `BasePage.open`, `LoginPage.login`,
+`DashboardPage.logout`). Do not decorate every locator operation. Never attach
+passwords, tokens, session secrets, or sensitive personal data.
 
-1. Inspect `PageAdapter`.
-2. Identify the actual iframe.
-3. Confirm whether locators operate on `Page` or `FrameLocator`.
-4. Reuse the existing abstraction.
-5. Avoid creating separate iframe-handling mechanisms.
+## 7. Implementation loop
 
-Do not assume that a locator from the main document
-can locate elements inside an iframe.
+1. Inspect `BasePage`, `PageAdapter`, `UiComponent`, and similar pages.
+2. Reuse existing components and verify method signatures.
+3. Choose the minimum file change and verified locators.
+4. Implement the component/page method.
+5. Check imports and constructor compatibility.
+6. Run focused static checks and relevant UI tests.
+7. Review the diff and report unverified selectors or blockers.
 
-## 9. Playwright MCP
-
-Use Playwright MCP when available and relevant.
-
-### Inspection workflow
-
-1. Navigate to the target application.
-2. Inspect the accessible page structure.
-3. Identify target elements.
-4. Verify locator uniqueness.
-5. Check visibility and interaction states.
-6. Implement using the existing framework.
-
-Do not invent MCP tool names.
-
-Inspect the tools actually available in the Harness session.
-
-### If MCP is unavailable
-
-Use:
-
-- Existing Page Objects.
-- Application source.
-- Verified documentation.
-- Supplied DOM fragments.
-
-Clearly report which selectors remain unverified.
-
-Do not claim that DOM inspection was performed.
-
-Never perform destructive operations or expose credentials
-during inspection without authorization.
-
-## 10. Allure
-
-Follow `allure-annotations-and-naming`.
-
-Page-level Allure steps should describe meaningful behavior.
-
-Avoid logging every internal locator operation.
-
-Never attach:
-
-- Passwords.
-- Tokens.
-- Session secrets.
-- Sensitive personal data.
-
-Do not add unnecessary decorators to every component method.
-
-## 11. Implementation Workflow
-
-### Before implementation
-
-1. Read `AGENTS.md`.
-2. Inspect `BasePage` and `PageAdapter`.
-3. Inspect `UiComponent`, `Input` and `Button`.
-4. Review similar Page Objects.
-5. Identify reusable abstractions.
-6. Verify actual selectors.
-7. Determine the minimum required file changes.
-
-### During implementation
-
-1. Follow existing constructors.
-2. Reuse existing components.
-3. Encapsulate stable locators.
-4. Implement meaningful methods.
-5. Use Playwright synchronization.
-6. Avoid unrelated refactoring.
-7. Do not modify framework internals without authorization.
-
-### After implementation
-
-1. Check imports.
-2. Check constructor compatibility.
-3. Confirm component methods exist.
-4. Check locator uniqueness when possible.
-5. Run relevant static checks.
-6. Run targeted UI tests when possible.
-7. Review the diff.
-
-Example:
+Example checks, adapted to the changed paths:
 
 ```bash
+.venv/bin/ruff check pages framework/ui
+.venv/bin/python -m pytest tests/ui -q
 git diff --check
-ruff check pages/ framework/ui/
-pytest tests/ui_tests/ -q
 ```
 
-Use only commands supported by the actual repository.
-
-Do not assume every example path or tool is configured.
-
-## 12. Completion Criteria
-
-The implementation is complete when:
-
-- [ ] It follows `BasePage` and `PageAdapter` contracts.
-- [ ] Existing components are reused.
-- [ ] Locators are verified or explicitly identified as unverified.
-- [ ] No framework APIs were invented.
-- [ ] No arbitrary sleeps were introduced.
-- [ ] No unrelated files were modified.
-- [ ] Imports and static checks pass.
-- [ ] Targeted tests were executed when possible.
-- [ ] Remaining blockers are documented.
-
-## Restrictions
-
-- Never invent selectors.
-- Never invent component methods.
-- Never bypass existing abstractions without justification.
-- Never hardcode credentials.
-- Never modify application source code.
-- Never introduce unnecessary dependencies.
-- Never claim successful execution without evidence.
-- Never commit or push without explicit authorization.
+Do not modify `framework/ui` internals merely to support one Page Object
+unless the task authorizes it. Do not create placeholder components. If a
+browser, `BASE_URL`, or DOM inspection is unavailable,
+report that limitation instead of claiming success.

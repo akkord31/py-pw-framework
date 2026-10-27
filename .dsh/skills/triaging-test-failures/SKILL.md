@@ -1,490 +1,138 @@
 ---
 name: triaging-test-failures
 description: >-
-  Analyze failed and broken pytest tests using Allure results.
-  Determine the root cause of each failure by comparing test
-  expectations, requirements and actual application behavior.
-  Classify failures, collect evidence and identify the responsible
-  team. Use after test runs with failures.
+  Investigate failed or broken pytest runs using raw Allure result JSON,
+  tracebacks, and attachments. Classify automation defects, application
+  defects, requirement gaps, and environment blockers with evidence. Use when
+  a UI or API test fails and the cause is not yet established.
 ---
 
 # Triaging Test Failures
 
-## Purpose
+## When to use
 
-Analyze failed or broken automated tests and determine
-the root cause and responsible owner.
+Use this Skill after a pytest run reports failed, broken, or unexpectedly
+skipped tests. It is read-only analysis: do not modify tests, Page Objects,
+clients, fixtures, application code, or expected results during triage.
 
-This skill is **read-only analysis**.
+Follow `AGENTS.md` for global rules. Load `writing-ui-tests`,
+`writing-api-tests`, or `page-object-creation` only when the task moves from
+diagnosis to a fix.
 
-Never modify tests, documentation, application code or
-expected results during triage.
+## 1. Evidence sources
 
-Follow `AGENTS.md` for global project rules.
+Do not parse the generated HTML Allure report; its embedded JavaScript is not
+a reliable structured source. Use the raw files in the run's Allure results
+directory. Use the actual `--alluredir` path from the pytest invocation.
 
-Used by:
-- `report-analyst` — reporting and failure classification.
-- `sdet-reviewer` — investigation of automation defects.
-- `sdet-orchestrator` — coordination and delegation.
+| Artifact | Contents |
+|---|---|
+| `*-result.json` | name, fullName, historyId, status, statusDetails, labels, links, steps, attachments |
+| `*-container.json` | fixture/setup/teardown containers |
+| `*-attachment.*` | logs, screenshots, API payloads, Playwright traces |
 
-## 1. Allure Data Sources
+Also inspect:
 
-Do not parse `allure-report/index.html`.
+- The exact pytest command and exit code.
+- The failing test function and its Page Object/client call chain.
+- The relevant conftest/fixtures and test data.
+- The requirement or approved TMS case when one exists.
+- `pytest.ini` markers and `--tb` output.
 
-The generated HTML report contains embedded JavaScript
-and is not a reliable source for structured analysis.
+Never fabricate a run, traceback, attachment, or requirement.
 
-Use the raw files in `allure-results/`.
+## 2. Triage procedure
 
-| Artifact | Location | Contents |
+1. List every `failed` and `broken` result; include unexpected skips.
+2. Deduplicate reruns by `historyId`, keeping the latest result.
+3. Read `statusDetails.message` and the relevant traceback.
+4. Distinguish a test-body failure from setup/teardown failure.
+5. Identify the first meaningful failure, not later cascade errors.
+6. Inspect attachments, especially Playwright traces and HTTP payloads.
+7. Compare source expectation, test implementation, and observed behavior.
+8. Assign one primary cause and an evidence statement.
+9. Recommend the smallest owner-specific next action.
+
+For a suspected flaky failure, look for timing, locator, shared-state,
+test-order, environment, and data-isolation signals before blaming the
+application. A timeout or missing element is a symptom, not a root cause.
+
+## 3. Classification
+
+| Cause | Meaning | Typical owner |
 |---|---|---|
-| Test results | `*-result.json` | Status, errors, steps, labels, links |
-| Containers | `*-container.json` | Setup and teardown fixtures |
-| Attachments | `*-attachment.*` | API requests, responses and other evidence |
-
-Important fields:
-
-- `name`
-- `fullName`
-- `historyId`
-- `status`
-- `statusDetails.message`
-- `statusDetails.trace`
-- `labels`
-- `links`
-- `steps`
-- `attachments`
-
-Analyze tests with:
-
-```python
-status in {"failed", "broken"}
-```
-
-Distinguish test-body failures from setup and teardown failures.
-
-## 2. Failure Analyzer
-
-The project provides:
-
-`tools/analyse_allure_failures.py`
-
-Run:
-
-```bash
-python tools/analyse_allure_failures.py
-```
-
-Include complete tracebacks:
-
-```bash
-python tools/analyse_allure_failures.py --full
-```
-
-Analyze skipped tests:
-
-```bash
-python tools/analyse_allure_failures.py --status skipped
-```
-
-Export machine-readable results:
-
-```bash
-python tools/analyse_allure_failures.py \
-  --results allure-results \
-  --json docs/runs/last_run/failures.json
-```
-
-The analyzer:
-
-1. Reads Allure result JSON.
-2. Deduplicates reruns using the latest `historyId`.
-3. Calculates passed/failed/broken/skipped totals.
-4. Groups failures by error signature.
-5. Extracts messages and relevant traceback lines.
-
-Possible error signatures:
-
-- Timeout
-- Locator failure
-- HTTP status mismatch
-- Database error
-- Assertion failure
-- Connection error
-
-**Error signatures are not root causes.**
-
-A timeout may indicate either an automation defect
-or an application problem.
-
-The analyst must investigate the underlying cause.
-
-## 3. Root Cause Classification
-
-Assign one primary root cause to every confirmed failure.
-
-| Cause | Description | Owner |
-|---|---|---|
-| `OUTDATED_TEST_CASE` | Zephyr test case is obsolete; application behavior is correct | BA / QA |
-| `OUTDATED_DOCUMENTATION` | Confluence specification is obsolete; application behavior is correct | BA / QA |
-| `AUTOMATION_DEFECT` | Test implementation, data, assertions or synchronization are incorrect | SDET |
+| `AUTOMATION_DEFECT` | Wrong assertion/data/locator/flow, missing wait, isolation defect | SDET/automation |
 | `APPLICATION_BUG` | Application contradicts verified requirements | Development |
+| `REQUIREMENT_GAP` | Source is missing, ambiguous, or outdated | BA/QA/source owner |
+| `ENVIRONMENT` | Browser, network, service, credentials, or data unavailable | Environment/DevOps |
+| `UNCONFIRMED` | Evidence is insufficient for a primary cause | Requester |
 
-Optional secondary tag:
+Do not mark an application bug merely because observed behavior differs from
+an unverified test. Do not mark an automation defect merely because the test
+failed. Use one primary cause; add an optional `FLAKY` note only as a secondary
+observation.
 
-`ENVIRONMENT/FLAKY`
+## 4. Three-way comparison
 
-Use this for infrastructure, intermittent timing,
-shared-state or environment-related problems.
+Compare:
 
-A secondary tag does not replace the primary cause.
-
-### Outdated test case
-
-The automated test correctly reproduces an outdated
-Jira/Zephyr test case.
-
-Actions:
-
-1. Identify the outdated source requirement.
-2. Document the conflicting application behavior.
-3. Route the case to BA/QA.
-4. Wait for a human to correct the test case.
-5. Update automation only after the source is approved.
-
-**Never automatically modify Zephyr test cases.**
-
-### Outdated documentation
-
-The automated test follows an outdated Confluence specification.
-
-Actions:
-
-1. Identify the obsolete requirement.
-2. Collect evidence of actual behavior.
-3. Route the discrepancy to BA/QA.
-4. Wait for human approval and documentation correction.
-5. Update automation afterward.
-
-**Never automatically modify authoritative requirements.**
-
-### Automation defect
-
-The test implementation is incorrect.
-
-Examples:
-
-- Wrong expected value
-- Incorrect test data
-- Invalid locator
-- Wrong endpoint
-- Missing precondition
-- Race condition
-- Broken test isolation
-- Incorrect synchronization
-
-Owner: SDET.
-
-The triage skill identifies the defect but does not fix it.
-
-### Application bug
-
-Application behavior contradicts verified requirements.
-
-Examples:
-
-- Unexpected HTTP 500
-- Incorrect response data
-- Broken API contract
-- Missing functionality
-- Incorrect business logic
-
-Owner: Development.
-
-Recommend a Jira bug with reproducible evidence.
-
-Do not create tickets without authorization.
-
-## 4. Three-Way Comparison
-
-Root cause is determined by comparing:
-
-1. **Source** — Jira/Zephyr case or Confluence specification.
-2. **Test** — implemented assertions and actions.
-3. **Application** — observed runtime behavior.
+1. **Source** — approved TMS case, spec, or development-task requirement.
+2. **Test** — actions and assertions actually implemented.
+3. **Application** — evidence from the run, not assumptions.
 
 | Test vs source | Application vs source | Verdict |
 |---|---|---|
-| Different | Matches | Automation defect |
-| Matches | Different, but new behavior is approved | Outdated case/documentation |
-| Matches | Different, source remains correct | Application bug |
-| Matches | Intermittent behavior | Investigate automation, environment and application |
+| Differs | Matches | Automation defect |
+| Matches | Differs; source outdated | Requirement gap |
+| Matches | Differs; source valid | Application bug |
+| Matches | Intermittent/unclear | Investigate isolation/environment; `UNCONFIRMED` if needed |
 
-Do not declare the application correct merely
-because it consistently behaves a certain way.
+If no authoritative source exists, state that limitation. Observed behavior
+alone does not prove intended behavior.
 
-Approval or authoritative evidence is required.
+## 5. Evidence standard
 
-### Investigation procedure
+Each finding must include:
 
-For each failure:
+- Test ID and file/line.
+- Status (`failed` or `broken`) and the primary error.
+- The relevant traceback lines or attachment.
+- The expectation and observed result.
+- The root-cause classification and confidence.
+- The smallest recommended action and owner type.
+- Any missing evidence or unresolved question.
 
-1. Read the analyzer output.
-2. Inspect the full traceback.
-3. Identify the failing test and its dependencies.
-4. Determine whether the test is case-driven or spec-driven.
-5. Retrieve the original requirement.
-6. Inspect actual application behavior.
-7. Compare the three sources.
-8. Assign the root cause and owner.
-9. Record supporting evidence.
-10. Hand the verdict to `report-analyst`.
+Do not report speculative causes as confirmed. Mark uncertain findings
+`UNCONFIRMED`; do not invent a root cause.
 
-Use `fetching-test-cases-and-wiki` when requirements
-must be retrieved.
+## 6. Reporting
 
-Use `api-contract-audit` for API contract contradictions.
+Present a concise table in the response:
 
-## 5. Insufficient Evidence
+| Test | Cause | Evidence | Recommended action |
+|---|---|---|---|
+| `test_example` | `AUTOMATION_DEFECT` | Locator no longer matches DOM | Fix locator in Page Object |
+| `test_api` | `APPLICATION_BUG` | Verified contract mismatch | Raise with Development |
 
-When the root cause cannot be established,
-mark the failure:
+Also report:
 
-`NEEDS-INFO`
+- Command and exit code.
+- Passed/failed/broken/skipped counts.
+- Scope of the triage (which tests/directories).
+- Coverage or evidence gaps.
+- Whether a fix was made or the task remains diagnostic.
 
-Specify:
+Do not create report files or update requirements unless the user asks.
+Never create a Jira bug or change a TMS case without authorization.
 
-- What is known.
-- Which evidence is missing.
-- Why a verdict cannot be reached.
-- What investigation is needed next.
+## 7. Completion criteria
 
-Never:
-
-- Invent expected results.
-- Fabricate a root cause.
-- Reinterpret requirements without evidence.
-- Force a failure into one of the four categories.
-- Repeatedly rerun tests until they become green.
-
-Uncertain findings must remain explicitly uncertain.
-
-## 6. Evidence Collection
-
-### Error messages
-
-`statusDetails.message` contains the failure headline.
-
-Example:
-
-```text
-Expected status 200 but got 500
-```
-
-### Tracebacks
-
-`statusDetails.trace` identifies the failing call
-and relevant source location.
-
-Capture:
-
-- File and line number
-- Failing assertion
-- Actual value
-- Expected value
-- Relevant exception
-
-### API failures
-
-Use the existing `BaseApi` / `BaseAssertions` evidence:
-
-- HTTP method
-- Endpoint URL
-- Request payload
-- Response status
-- Response body
-
-Avoid exposing tokens, passwords or sensitive data.
-
-An HTTP 500 is not automatically an application bug.
-Verify the request, preconditions and contract first.
-
-### UI failures
-
-Inspect:
-
-- Locator uniqueness
-- Element visibility
-- Loading indicators
-- Browser context state
-- Page navigation
-- Playwright trace, when available
-
-Playwright traces are UI-specific.
-
-Run scripts may reproduce failed UI tests with `--pw-trace`.
-
-Do not expect Playwright traces for API-only failures.
-
-### Database and timing
-
-For intermittent failures, inspect:
-
-- Test data isolation
-- Concurrent updates
-- Transaction boundaries
-- Polling and retry behavior
-- Database state
-- Shared test fixtures
-
-Use existing `db/` repositories when available.
-
-Treat a failed precondition separately from
-a failed application assertion.
-
-Do not assume every setup failure is an automation defect.
-
-## 7. Worked Examples
-
-### Example A — HTTP 500
-
-Test:
-
-`test_recipients_latest_pos`
-
-Failure:
-
-```text
-Expected status 200 but got 500
-/api/author/recipients/latest-recipients
-```
-
-If the request follows the verified contract
-and the environment is healthy:
-
-- Cause: `APPLICATION_BUG`
-- Owner: Development
-- Action: Recommend a Jira bug
-
-### Example B — Inconsistent counts
-
-Test:
-
-`test_letters_search_held_user_filter_pos`
-
-Failure:
-
-```text
-held(0) + free(9) != total(10)
-```
-
-Three sequential OData calls may observe different states.
-
-Investigate:
-
-- Shared-state changes between requests
-- Non-atomic reads
-- Incorrect filter implementation
-
-Possible outcomes:
-
-- Incorrect filtering → `APPLICATION_BUG`
-- Unstable test snapshot → `AUTOMATION_DEFECT`
-- Insufficient evidence → `NEEDS-INFO`
-
-Do not classify before reproducing the behavior.
-
-## 8. Reporting
-
-Hand findings to `report-analyst`.
-
-After each completed run, the reporting workflow
-maintains two documents:
-
-```text
-docs/runs/last_run/task_report.md
-docs/runs/last_run/test_failure_triage.md
-```
-
-### Run report
-
-`task_report.md` contains:
-
-- Run description
-- Last updated date
-- Overall status
-- Passed/failed/broken/skipped totals
-- Root cause summary
-- Required handoffs
-- Run history
-
-### Failure triage report
-
-`test_failure_triage.md` contains:
-
-- Failure classification table
-- Evidence per failure
-- Responsible owner
-- Bugs to raise
-- Missing information
-- Recommended next actions
-
-Suggested table:
-
-| Test | Root cause | Evidence | Owner | Action |
-|---|---|---|---|---|
-| `test_example` | `AUTOMATION_DEFECT` | Invalid locator | SDET | Fix locator |
-| `test_api` | `APPLICATION_BUG` | Verified contract mismatch | Dev | Raise bug |
-
-Keep the two reports synchronized.
-
-Prefer concise Markdown tables.
-
-Link Jira and Confluence sources instead of
-duplicating entire specifications.
-
-Collapse previous runs into one run-history table.
-
-**This skill performs analysis only.**
-Report updates are the responsibility of `report-analyst`.
-
-## 9. Preconditions
-
-Required:
-
-- Completed pytest execution
-- Available `allure-results/`
-- Relevant test implementation
-- Access to requirements when needed
-
-Generate the HTML report if necessary:
-
-```bash
-allure generate allure-results \
-  --clean \
-  --single-file \
-  -o allure-report
-```
-
-HTML generation is optional for triage.
-
-Live API or database verification may require
-credentials already configured in `.env`.
-
-Never expose credentials.
-
-## 10. Completion Criteria
-
-Triage is complete when:
-
-- [ ] Every failed/broken test is identified.
+- [ ] Every failed/broken test is accounted for.
 - [ ] Reruns are deduplicated.
-- [ ] Relevant tracebacks are inspected.
-- [ ] Test expectations are compared with requirements.
-- [ ] Actual application behavior is considered.
-- [ ] Confirmed failures have a root cause.
-- [ ] Uncertain failures are marked `NEEDS-INFO`.
-- [ ] Every finding contains evidence.
-- [ ] Every confirmed cause has an owner.
-- [ ] Results are handed to `report-analyst`.
-- [ ] No tests, requirements or application files were modified.
+- [ ] Setup/teardown failures are distinguished from test-body failures.
+- [ ] Actual evidence is cited.
+- [ ] Confirmed failures have one primary cause and owner type.
+- [ ] Uncertain failures are `UNCONFIRMED`.
+- [ ] Recommended actions do not weaken assertions.
+- [ ] Missing source/evidence is reported rather than guessed.
+- [ ] No production, test, fixture, or requirement file was modified.
